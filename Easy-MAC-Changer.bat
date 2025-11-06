@@ -21,27 +21,47 @@ echo    Bypass WiFi Blockers by Changing MAC
 echo ========================================
 echo.
 
-:: Find active network adapter (prefer WiFi, fallback to Ethernet)
+:: Find active network adapter
 echo [*] Detecting network adapter...
 set "ADAPTER_NAME="
 set "CURMAC="
+set "ADAPTER_DRIVER="
 
 :: Try to find WiFi adapter first
-for /f "tokens=2,1 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Wi-Fi Wireless"') do (
-  set "CURMAC=%%a"
-  set "ADAPTER_NAME=%%b"
-  set "CURMAC=!CURMAC:"=!"
+for /f "tokens=1,2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Wi-Fi Wireless"') do (
+  set "ADAPTER_NAME=%%a"
+  set "CURMAC=%%b"
   set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
-  if not "!CURMAC!"=="" goto :found_adapter
+  set "CURMAC=!CURMAC:"=!"
+  if not "!CURMAC!"=="" (
+    :: Extract driver name from adapter name for registry search
+    set "ADAPTER_DRIVER=!ADAPTER_NAME!"
+    goto :found_adapter
+  )
+)
+
+:: Fallback to Ethernet/Realtek
+for /f "tokens=1,2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Realtek"') do (
+  set "ADAPTER_NAME=%%a"
+  set "CURMAC=%%b"
+  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
+  set "CURMAC=!CURMAC:"=!"
+  if not "!CURMAC!"=="" (
+    set "ADAPTER_DRIVER=Realtek PCIe GbE Family Controller"
+    goto :found_adapter
+  )
 )
 
 :: Fallback to any active adapter
-for /f "tokens=2,1 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
-  set "CURMAC=%%a"
-  set "ADAPTER_NAME=%%b"
-  set "CURMAC=!CURMAC:"=!"
+for /f "tokens=1,2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
+  set "ADAPTER_NAME=%%a"
+  set "CURMAC=%%b"
   set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
-  if not "!CURMAC!"=="" goto :found_adapter
+  set "CURMAC=!CURMAC:"=!"
+  if not "!CURMAC!"=="" (
+    set "ADAPTER_DRIVER=!ADAPTER_NAME!"
+    goto :found_adapter
+  )
 )
 
 echo.
@@ -68,38 +88,22 @@ for /f "usebackq delims=" %%M in (`
 echo [SUCCESS] New MAC Address: %NEWMAC%
 echo.
 
-:: Find registry key for the adapter
+:: Find registry key for the adapter using the original method
 echo [*] Searching for adapter registry key...
 set "FoundKey="
 
-:: Search through network adapter registry keys and match by adapter name
-for /f "delims=" %%K in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}" /s 2^>nul ^| findstr "{4d36e972-e325-11ce-bfc1-08002be10318}"') do (
-  reg query "%%K" /v DriverDesc 2^>nul | findstr /i "%ADAPTER_NAME%" >nul 2>&1
-  if !errorlevel! equ 0 (
-    set "FoundKey=%%K"
-    goto :found_key
-  )
+:: Use the original registry search method
+for /f "delims=" %%K in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}" /s /f "%ADAPTER_DRIVER%" 2^>nul ^| findstr "{4d36e972-e325-11ce-bfc1-08002be10318}"') do set "FoundKey=%%K"
+
+if not defined FoundKey (
+  echo.
+  echo [ERROR] Could not find adapter registry key.
+  echo [INFO] Please ensure your network adapter is properly installed.
+  echo.
+  pause
+  exit /b
 )
 
-:: Alternative: find by matching adapter name in NetCfgInstanceId
-for /f "delims=" %%K in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}" /s 2^>nul ^| findstr "{4d36e972-e325-11ce-bfc1-08002be10318}"') do (
-  :: Try to match by checking if this adapter has our MAC
-  for /f "tokens=3" %%M in ('reg query "%%K" /v NetworkAddress 2^>nul') do (
-    if /i "%%M"=="%CURMAC%" (
-      set "FoundKey=%%K"
-      goto :found_key
-    )
-  )
-)
-
-echo.
-echo [ERROR] Could not find adapter registry key.
-echo [INFO] Please ensure your network adapter is properly installed.
-echo.
-pause
-exit /b
-
-:found_key
 echo [SUCCESS] Registry key found.
 echo.
 
@@ -118,20 +122,34 @@ if %errorlevel% neq 0 (
 echo [SUCCESS] MAC address set in registry.
 echo.
 
+:: Determine interface name for netsh (use "Ethernet" for wired, "Wi-Fi" for wireless)
+set "INTERFACE_NAME=Ethernet"
+echo %ADAPTER_NAME% | findstr /i "Wi-Fi Wireless" >nul
+if %errorlevel% equ 0 set "INTERFACE_NAME=Wi-Fi"
+
 :: Disable and enable adapter to apply change
 echo [*] Disabling network adapter...
-netsh interface set interface "%ADAPTER_NAME%" admin=disabled >nul 2>&1
+netsh interface set interface "%INTERFACE_NAME%" admin=disabled >nul 2>&1
 timeout /t 2 >nul
 
 echo [*] Enabling network adapter...
-netsh interface set interface "%ADAPTER_NAME%" admin=enabled >nul 2>&1
+netsh interface set interface "%INTERFACE_NAME%" admin=enabled >nul 2>&1
 timeout /t 3 >nul
 
-:: Verify new MAC address
+:: Verify new MAC address using original method
 echo [*] Verifying MAC address change...
-for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "%ADAPTER_NAME%"') do (
+set "READMAC="
+for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "%ADAPTER_DRIVER%"') do (
   set "READMAC=%%a"
   set "READMAC=!READMAC:"=!"
+)
+
+:: Fallback verification if driver search doesn't work
+if not defined READMAC (
+  for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "%ADAPTER_NAME%"') do (
+    set "READMAC=%%a"
+    set "READMAC=!READMAC:"=!"
+  )
 )
 
 echo.
