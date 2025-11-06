@@ -58,13 +58,17 @@ for /f "tokens=2,3 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media
   )
 )
 
-echo ERROR: No active network adapter found.
+echo.
+echo Error: No active network adapter found.
+echo.
 pause
 exit /b
 
 :found_adapter
-echo Network Adapter: %ADAPTER_NAME%
-echo Current MAC:     %CURMAC%
+echo Network Information:
+echo ----------------------------------------
+echo Adapter: %ADAPTER_NAME%
+echo Current MAC: %CURMAC%
 echo.
 
 :: Generate random locally-administered unicast MAC address
@@ -78,9 +82,9 @@ for /f "usebackq delims=" %%M in (`
 :: Format new MAC with dashes
 set "NEWMAC_FORMATTED=%NEWMAC:~0,2%-%NEWMAC:~2,2%-%NEWMAC:~4,2%-%NEWMAC:~6,2%-%NEWMAC:~8,2%-%NEWMAC:~10,2%"
 
-echo New MAC:        %NEWMAC_FORMATTED%
+echo New MAC: %NEWMAC_FORMATTED%
 echo.
-echo Applying changes...
+echo ----------------------------------------
 echo.
 
 :: Find registry key for the adapter
@@ -88,32 +92,34 @@ set "FoundKey="
 for /f "delims=" %%K in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}" /s /f "%ADAPTER_DRIVER%" 2^>nul ^| findstr "{4d36e972-e325-11ce-bfc1-08002be10318}"') do set "FoundKey=%%K"
 
 if not defined FoundKey (
-  echo ERROR: Could not find adapter registry key.
+  echo Error: Could not find adapter registry key.
+  echo.
   pause
   exit /b
 )
 
 :: Progress indicator - updating registry
-echo [*] Updating registry...
+echo Updating registry...
 reg add "%FoundKey%" /v NetworkAddress /t REG_SZ /d %NEWMAC% /f >nul 2>&1
 if %errorlevel% neq 0 (
-  echo ERROR: Failed to set MAC address in registry.
+  echo Error: Failed to set MAC address in registry.
+  echo.
   pause
   exit /b
 )
-echo [*] Registry updated
+echo Done.
 
 :: Progress indicator - disabling adapter
-echo [*] Disabling adapter...
+echo Disabling network adapter...
 netsh interface set interface "%INTERFACE_NAME%" admin=disabled >nul 2>&1
 timeout /t 1 >nul
-echo [*] Adapter disabled
+echo Done.
 
 :: Progress indicator - enabling adapter
-echo [*] Enabling adapter...
+echo Enabling network adapter...
 netsh interface set interface "%INTERFACE_NAME%" admin=enabled >nul 2>&1
 timeout /t 2 >nul
-echo [*] Adapter enabled
+echo Done.
 
 :: Verify new MAC address
 set "READMAC="
@@ -134,12 +140,12 @@ if not defined READMAC (
 
 echo.
 echo ========================================
-echo    MAC Address Changed Successfully
+echo    Success
 echo ========================================
 echo.
-echo Old MAC: %CURMAC%
-echo New MAC: %READMAC%
+echo Old MAC Address: %CURMAC%
+echo New MAC Address: %READMAC%
 echo.
-echo Your WiFi connection should now be restored.
+echo Your network connection has been restored.
 echo.
 pause
