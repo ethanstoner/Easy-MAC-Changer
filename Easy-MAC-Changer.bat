@@ -1,14 +1,9 @@
 @echo off
 setlocal EnableDelayedExpansion
-color 0A
 
 :: Self-elevate to administrator
 >nul 2>&1 net session
 if %errorlevel% neq 0 (
-  cls
-  echo.
-  echo [*] Requesting administrator privileges...
-  timeout /t 1 >nul
   powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
   exit /b
 )
@@ -17,67 +12,55 @@ cls
 echo.
 echo ========================================
 echo    Easy MAC Address Changer
-echo    Bypass WiFi Blockers by Changing MAC
 echo ========================================
 echo.
 
 :: Find active network adapter
-echo [*] Detecting network adapter...
 set "ADAPTER_NAME="
 set "CURMAC="
 set "ADAPTER_DRIVER="
 
 :: Try to find WiFi adapter first
-for /f "tokens=1,2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Wi-Fi Wireless"') do (
-  set "ADAPTER_NAME=%%a"
-  set "CURMAC=%%b"
-  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
+for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Wi-Fi Wireless"') do (
+  set "CURMAC=%%a"
   set "CURMAC=!CURMAC:"=!"
   if not "!CURMAC!"=="" (
-    :: Extract driver name from adapter name for registry search
-    set "ADAPTER_DRIVER=!ADAPTER_NAME!"
+    set "ADAPTER_DRIVER=Wi-Fi"
+    set "INTERFACE_NAME=Wi-Fi"
     goto :found_adapter
   )
 )
 
 :: Fallback to Ethernet/Realtek
-for /f "tokens=1,2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Realtek"') do (
-  set "ADAPTER_NAME=%%a"
-  set "CURMAC=%%b"
-  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
+for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Realtek"') do (
+  set "CURMAC=%%a"
   set "CURMAC=!CURMAC:"=!"
   if not "!CURMAC!"=="" (
     set "ADAPTER_DRIVER=Realtek PCIe GbE Family Controller"
+    set "INTERFACE_NAME=Ethernet"
     goto :found_adapter
   )
 )
 
 :: Fallback to any active adapter
-for /f "tokens=1,2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
-  set "ADAPTER_NAME=%%a"
-  set "CURMAC=%%b"
-  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
+for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
+  set "CURMAC=%%a"
   set "CURMAC=!CURMAC:"=!"
   if not "!CURMAC!"=="" (
-    set "ADAPTER_DRIVER=!ADAPTER_NAME!"
+    set "INTERFACE_NAME=Ethernet"
     goto :found_adapter
   )
 )
 
-echo.
-echo [ERROR] No active network adapter found.
-echo [INFO] Please ensure your WiFi or Ethernet adapter is connected.
-echo.
+echo ERROR: No active network adapter found.
 pause
 exit /b
 
 :found_adapter
-echo [SUCCESS] Active Adapter: %ADAPTER_NAME%
-echo [INFO] Current MAC Address: %CURMAC%
+echo Current MAC: %CURMAC%
 echo.
 
 :: Generate random locally-administered unicast MAC address
-echo [*] Generating new MAC address...
 for /f "usebackq delims=" %%M in (`
   powershell -NoProfile -Command ^
     "$r = New-Object byte[] 6; (New-Object System.Random).NextBytes($r);" ^
@@ -85,82 +68,58 @@ for /f "usebackq delims=" %%M in (`
     "('{0:X2}{1:X2}{2:X2}{3:X2}{4:X2}{5:X2}' -f $r[0],$r[1],$r[2],$r[3],$r[4],$r[5])"
 `) do set "NEWMAC=%%M"
 
-echo [SUCCESS] New MAC Address: %NEWMAC%
+echo New MAC: %NEWMAC%
 echo.
 
-:: Find registry key for the adapter using the original method
-echo [*] Searching for adapter registry key...
+:: Find registry key for the adapter
 set "FoundKey="
-
-:: Use the original registry search method
 for /f "delims=" %%K in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}" /s /f "%ADAPTER_DRIVER%" 2^>nul ^| findstr "{4d36e972-e325-11ce-bfc1-08002be10318}"') do set "FoundKey=%%K"
 
 if not defined FoundKey (
-  echo.
-  echo [ERROR] Could not find adapter registry key.
-  echo [INFO] Please ensure your network adapter is properly installed.
-  echo.
+  echo ERROR: Could not find adapter registry key.
   pause
   exit /b
 )
-
-echo [SUCCESS] Registry key found.
-echo.
 
 :: Set new MAC address in registry
-echo [*] Applying new MAC address to registry...
 reg add "%FoundKey%" /v NetworkAddress /t REG_SZ /d %NEWMAC% /f >nul 2>&1
 if %errorlevel% neq 0 (
-  echo.
-  echo [ERROR] Failed to set MAC address in registry.
-  echo [INFO] Make sure you're running as administrator.
-  echo.
+  echo ERROR: Failed to set MAC address in registry.
   pause
   exit /b
 )
 
-echo [SUCCESS] MAC address set in registry.
-echo.
-
-:: Determine interface name for netsh (use "Ethernet" for wired, "Wi-Fi" for wireless)
-set "INTERFACE_NAME=Ethernet"
-echo %ADAPTER_NAME% | findstr /i "Wi-Fi Wireless" >nul
-if %errorlevel% equ 0 set "INTERFACE_NAME=Wi-Fi"
-
 :: Disable and enable adapter to apply change
-echo [*] Disabling network adapter...
 netsh interface set interface "%INTERFACE_NAME%" admin=disabled >nul 2>&1
 timeout /t 2 >nul
-
-echo [*] Enabling network adapter...
 netsh interface set interface "%INTERFACE_NAME%" admin=enabled >nul 2>&1
 timeout /t 3 >nul
 
-:: Verify new MAC address using original method
-echo [*] Verifying MAC address change...
+:: Verify new MAC address
 set "READMAC="
 for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "%ADAPTER_DRIVER%"') do (
   set "READMAC=%%a"
   set "READMAC=!READMAC:"=!"
 )
 
-:: Fallback verification if driver search doesn't work
+:: Fallback verification
 if not defined READMAC (
-  for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "%ADAPTER_NAME%"') do (
+  for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
     set "READMAC=%%a"
     set "READMAC=!READMAC:"=!"
+    goto :done_verify
   )
 )
+:done_verify
 
 echo.
 echo ========================================
 echo    MAC Address Changed Successfully!
 echo ========================================
 echo.
-echo   Old MAC Address: %CURMAC%
-echo   New MAC Address: %READMAC%
+echo Old MAC: %CURMAC%
+echo New MAC: %READMAC%
 echo.
-echo   [SUCCESS] Your WiFi connection should now be restored!
+echo Your WiFi connection should now be restored.
 echo.
-echo   Press any key to exit...
-pause >nul
+pause
