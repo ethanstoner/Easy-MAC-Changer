@@ -63,8 +63,8 @@ pause
 exit /b
 
 :found_adapter
-echo Driver: %ADAPTER_NAME%
-echo Current MAC: %CURMAC%
+echo Network Adapter: %ADAPTER_NAME%
+echo Current MAC:     %CURMAC%
 echo.
 
 :: Generate random locally-administered unicast MAC address
@@ -75,9 +75,12 @@ for /f "usebackq delims=" %%M in (`
     "('{0:X2}{1:X2}{2:X2}{3:X2}{4:X2}{5:X2}' -f $r[0],$r[1],$r[2],$r[3],$r[4],$r[5])"
 `) do set "NEWMAC=%%M"
 
-echo New MAC: %NEWMAC%
+:: Format new MAC with dashes
+set "NEWMAC_FORMATTED=%NEWMAC:~0,2%-%NEWMAC:~2,2%-%NEWMAC:~4,2%-%NEWMAC:~6,2%-%NEWMAC:~8,2%-%NEWMAC:~10,2%"
+
+echo New MAC:        %NEWMAC_FORMATTED%
 echo.
-echo Changing MAC address...
+echo Applying changes...
 echo.
 
 :: Find registry key for the adapter
@@ -91,26 +94,26 @@ if not defined FoundKey (
 )
 
 :: Progress indicator - updating registry
-echo [  ] Updating registry...
+echo [*] Updating registry...
 reg add "%FoundKey%" /v NetworkAddress /t REG_SZ /d %NEWMAC% /f >nul 2>&1
 if %errorlevel% neq 0 (
   echo ERROR: Failed to set MAC address in registry.
   pause
   exit /b
 )
-echo [OK] Registry updated
+echo [*] Registry updated
 
 :: Progress indicator - disabling adapter
-echo [  ] Disabling adapter...
+echo [*] Disabling adapter...
 netsh interface set interface "%INTERFACE_NAME%" admin=disabled >nul 2>&1
 timeout /t 1 >nul
-echo [OK] Adapter disabled
+echo [*] Adapter disabled
 
 :: Progress indicator - enabling adapter
-echo [  ] Enabling adapter...
+echo [*] Enabling adapter...
 netsh interface set interface "%INTERFACE_NAME%" admin=enabled >nul 2>&1
 timeout /t 2 >nul
-echo [OK] Adapter enabled
+echo [*] Adapter enabled
 
 :: Verify new MAC address
 set "READMAC="
@@ -131,7 +134,7 @@ if not defined READMAC (
 
 echo.
 echo ========================================
-echo    MAC Address Changed Successfully!
+echo    MAC Address Changed Successfully
 echo ========================================
 echo.
 echo Old MAC: %CURMAC%
