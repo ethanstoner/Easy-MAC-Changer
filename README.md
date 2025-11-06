@@ -2,11 +2,11 @@
 
 A simple Windows batch script that automatically changes your network adapter's MAC address to bypass WiFi blockers (like Netgear Nighthawk parental controls) and restore your internet connection.
 
-## 🎯 Purpose
+## Purpose
 
 This tool was designed to help bypass network restrictions by changing your MAC address. When a router blocks your device by MAC address, running this script will generate a new random MAC address and apply it, effectively restoring your WiFi connection.
 
-## ✨ Features
+## Features
 
 - **Automatic Adapter Detection** - Automatically finds your active WiFi or Ethernet adapter
 - **Random MAC Generation** - Generates a valid, locally-administered unicast MAC address
@@ -15,7 +15,7 @@ This tool was designed to help bypass network restrictions by changing your MAC 
 - **Visual Feedback** - Clear status messages throughout the process
 - **Verification** - Confirms the MAC address change was successful
 
-## 🚀 Usage
+## Usage
 
 1. **Download** the `Easy-MAC-Changer.bat` file
 2. **Right-click** and select "Run as administrator" (or just double-click - it will auto-elevate)
@@ -27,13 +27,13 @@ This tool was designed to help bypass network restrictions by changing your MAC 
 
 That's it! Your WiFi should be restored after the adapter restarts.
 
-## 📋 Requirements
+## Requirements
 
 - **Windows** (Windows 7 or later)
 - **Administrator privileges** (script will request automatically)
 - **Active network adapter** (WiFi or Ethernet)
 
-## 🔧 How It Works
+## How It Works
 
 1. **Detection**: Scans for active network adapters (prefers WiFi)
 2. **MAC Generation**: Creates a random, valid MAC address using PowerShell
@@ -41,24 +41,24 @@ That's it! Your WiFi should be restored after the adapter restarts.
 4. **Adapter Restart**: Disables and re-enables the adapter to apply changes
 5. **Verification**: Confirms the new MAC address is active
 
-## ⚠️ Important Notes
+## Important Notes
 
 - **Administrator Required**: This script modifies Windows registry and network settings, requiring admin privileges
 - **Temporary Disconnection**: Your network connection will be briefly interrupted while the adapter restarts
 - **Router Compatibility**: Works with most routers that block by MAC address (including Netgear Nighthawk)
 - **No Permanent Change**: The MAC address change persists until you manually change it again or reinstall the adapter driver
 
-## 🛠️ Technical Details
+## Technical Details
 
 - **MAC Format**: Generates locally-administered unicast MAC addresses (second bit of first octet set)
 - **Registry Path**: `HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}`
 - **Method**: Uses Windows `reg` command and `netsh` interface commands
 
-## 📝 License
+## License
 
 This project is provided as-is for educational and personal use.
 
-## 🤝 Contributing
+## Contributing
 
 Feel free to submit issues or improvements!
 
