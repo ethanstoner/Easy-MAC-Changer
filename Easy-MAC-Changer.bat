@@ -21,8 +21,10 @@ set "CURMAC="
 set "ADAPTER_DRIVER="
 
 :: Try to find WiFi adapter first
-for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Wi-Fi Wireless"') do (
-  set "CURMAC=%%a"
+for /f "tokens=2,3 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Wi-Fi Wireless"') do (
+  set "ADAPTER_NAME=%%a"
+  set "CURMAC=%%b"
+  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
   set "CURMAC=!CURMAC:"=!"
   if not "!CURMAC!"=="" (
     set "ADAPTER_DRIVER=Wi-Fi"
@@ -32,8 +34,10 @@ for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Wi-Fi W
 )
 
 :: Fallback to Ethernet/Realtek
-for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Realtek"') do (
-  set "CURMAC=%%a"
+for /f "tokens=2,3 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Realtek"') do (
+  set "ADAPTER_NAME=%%a"
+  set "CURMAC=%%b"
+  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
   set "CURMAC=!CURMAC:"=!"
   if not "!CURMAC!"=="" (
     set "ADAPTER_DRIVER=Realtek PCIe GbE Family Controller"
@@ -43,8 +47,10 @@ for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Realtek
 )
 
 :: Fallback to any active adapter
-for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
-  set "CURMAC=%%a"
+for /f "tokens=2,3 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
+  set "ADAPTER_NAME=%%a"
+  set "CURMAC=%%b"
+  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
   set "CURMAC=!CURMAC:"=!"
   if not "!CURMAC!"=="" (
     set "INTERFACE_NAME=Ethernet"
@@ -57,6 +63,7 @@ pause
 exit /b
 
 :found_adapter
+echo Driver: %ADAPTER_NAME%
 echo Current MAC: %CURMAC%
 echo.
 
@@ -70,6 +77,8 @@ for /f "usebackq delims=" %%M in (`
 
 echo New MAC: %NEWMAC%
 echo.
+echo Changing MAC address...
+echo.
 
 :: Find registry key for the adapter
 set "FoundKey="
@@ -81,30 +90,38 @@ if not defined FoundKey (
   exit /b
 )
 
-:: Set new MAC address in registry
+:: Progress indicator - updating registry
+echo [  ] Updating registry...
 reg add "%FoundKey%" /v NetworkAddress /t REG_SZ /d %NEWMAC% /f >nul 2>&1
 if %errorlevel% neq 0 (
   echo ERROR: Failed to set MAC address in registry.
   pause
   exit /b
 )
+echo [OK] Registry updated
 
-:: Disable and enable adapter to apply change
+:: Progress indicator - disabling adapter
+echo [  ] Disabling adapter...
 netsh interface set interface "%INTERFACE_NAME%" admin=disabled >nul 2>&1
-timeout /t 2 >nul
+timeout /t 1 >nul
+echo [OK] Adapter disabled
+
+:: Progress indicator - enabling adapter
+echo [  ] Enabling adapter...
 netsh interface set interface "%INTERFACE_NAME%" admin=enabled >nul 2>&1
-timeout /t 3 >nul
+timeout /t 2 >nul
+echo [OK] Adapter enabled
 
 :: Verify new MAC address
 set "READMAC="
-for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "%ADAPTER_DRIVER%"') do (
+for /f "tokens=3 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "%ADAPTER_DRIVER%"') do (
   set "READMAC=%%a"
   set "READMAC=!READMAC:"=!"
 )
 
 :: Fallback verification
 if not defined READMAC (
-  for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
+  for /f "tokens=3 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
     set "READMAC=%%a"
     set "READMAC=!READMAC:"=!"
     goto :done_verify
