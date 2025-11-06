@@ -15,12 +15,10 @@ if %errorlevel% neq 0 (
 
 cls
 echo.
-echo   ╔═══════════════════════════════════════════════════════════╗
-echo   ║                                                           ║
-echo   ║         Easy MAC Address Changer                          ║
-echo   ║         Bypass WiFi Blockers by Changing MAC               ║
-echo   ║                                                           ║
-echo   ╚═══════════════════════════════════════════════════════════╝
+echo ========================================
+echo    Easy MAC Address Changer
+echo    Bypass WiFi Blockers by Changing MAC
+echo ========================================
 echo.
 
 :: Find active network adapter (prefer WiFi, fallback to Ethernet)
@@ -29,20 +27,20 @@ set "ADAPTER_NAME="
 set "CURMAC="
 
 :: Try to find WiFi adapter first
-for /f "tokens=1,2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Wi-Fi Wireless"') do (
-  set "ADAPTER_NAME=%%a"
-  set "CURMAC=%%b"
-  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
+for /f "tokens=2,1 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "Wi-Fi Wireless"') do (
+  set "CURMAC=%%a"
+  set "ADAPTER_NAME=%%b"
   set "CURMAC=!CURMAC:"=!"
+  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
   if not "!CURMAC!"=="" goto :found_adapter
 )
 
 :: Fallback to any active adapter
-for /f "tokens=1,2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
-  set "ADAPTER_NAME=%%a"
-  set "CURMAC=%%b"
-  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
+for /f "tokens=2,1 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /v "Media disconnected"') do (
+  set "CURMAC=%%a"
+  set "ADAPTER_NAME=%%b"
   set "CURMAC=!CURMAC:"=!"
+  set "ADAPTER_NAME=!ADAPTER_NAME:"=!"
   if not "!CURMAC!"=="" goto :found_adapter
 )
 
@@ -76,15 +74,16 @@ set "FoundKey="
 
 :: Search through network adapter registry keys and match by adapter name
 for /f "delims=" %%K in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}" /s 2^>nul ^| findstr "{4d36e972-e325-11ce-bfc1-08002be10318}"') do (
-  reg query "%%K" /v DriverDesc 2^>nul | findstr /i "%ADAPTER_NAME%" >nul
+  reg query "%%K" /v DriverDesc 2^>nul | findstr /i "%ADAPTER_NAME%" >nul 2>&1
   if !errorlevel! equ 0 (
     set "FoundKey=%%K"
     goto :found_key
   )
 )
 
-:: Alternative: find by matching MAC address
+:: Alternative: find by matching adapter name in NetCfgInstanceId
 for /f "delims=" %%K in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}" /s 2^>nul ^| findstr "{4d36e972-e325-11ce-bfc1-08002be10318}"') do (
+  :: Try to match by checking if this adapter has our MAC
   for /f "tokens=3" %%M in ('reg query "%%K" /v NetworkAddress 2^>nul') do (
     if /i "%%M"=="%CURMAC%" (
       set "FoundKey=%%K"
@@ -136,11 +135,9 @@ for /f "tokens=2 delims=," %%a in ('getmac /v /fo csv /nh ^| findstr /i "%ADAPTE
 )
 
 echo.
-echo   ╔═══════════════════════════════════════════════════════════╗
-echo   ║                                                           ║
-echo   ║         MAC Address Changed Successfully!                 ║
-echo   ║                                                           ║
-echo   ╚═══════════════════════════════════════════════════════════╝
+echo ========================================
+echo    MAC Address Changed Successfully!
+echo ========================================
 echo.
 echo   Old MAC Address: %CURMAC%
 echo   New MAC Address: %READMAC%
@@ -149,4 +146,3 @@ echo   [SUCCESS] Your WiFi connection should now be restored!
 echo.
 echo   Press any key to exit...
 pause >nul
-
